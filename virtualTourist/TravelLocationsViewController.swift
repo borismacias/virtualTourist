@@ -33,6 +33,8 @@ class TravelLocationViewController: UIViewController, MKMapViewDelegate, NSFetch
     }
     
     override func viewWillAppear(animated: Bool) {
+        // MARK: - Restoring old map appearance 
+        
         restoreMapRegion(animated)
         let pins = fetchedResultsController.fetchedObjects!
         for p in pins {
@@ -65,6 +67,7 @@ class TravelLocationViewController: UIViewController, MKMapViewDelegate, NSFetch
     }()
     
     @IBAction func createPin(sender: UILongPressGestureRecognizer) {
+        // MARK: - Filtering the states to only set the pin at the start of the event
         if sender.state == UIGestureRecognizerState.Began {
             let touchPoint = sender.locationInView(self.mapView)
             let coordinate = self.mapView.convertPoint(touchPoint, toCoordinateFromView: self.mapView)
@@ -74,7 +77,8 @@ class TravelLocationViewController: UIViewController, MKMapViewDelegate, NSFetch
             CoreDataStackManager.sharedInstance().saveContext()
         }
     }
-    
+
+    // MARK: - Mapviewdelegate functions
     func mapView(mapView: MKMapView, viewForAnnotation annotation: MKAnnotation) -> MKAnnotationView? {
         
         let reuseId = "pin"
@@ -95,7 +99,8 @@ class TravelLocationViewController: UIViewController, MKMapViewDelegate, NSFetch
         self.selectedPin = view.annotation as! Pin
         performSegueWithIdentifier("showPhotoViewCollection", sender: self)
     }
-    
+
+    // MARK: - Saving the map state on region change
     func mapView(mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
         saveMapRegion()
     }
@@ -110,7 +115,7 @@ class TravelLocationViewController: UIViewController, MKMapViewDelegate, NSFetch
         
     }
     
-    //Functions to save and restore the map status
+    // MARK: - Functions to save and restore the map status
     func saveMapRegion() {
         
         let dictionary = [

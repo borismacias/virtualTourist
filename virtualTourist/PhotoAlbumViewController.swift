@@ -13,8 +13,8 @@ import MapKit
 
 class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSFetchedResultsControllerDelegate, UICollectionViewDataSource {
 
+    // MARK: - Indexes used for the collection view
     var selectedIndexes = [NSIndexPath]()
-    
     var insertedIndexPaths: [NSIndexPath]!
     var deletedIndexPaths: [NSIndexPath]!
     var updatedIndexPaths: [NSIndexPath]!
@@ -37,67 +37,6 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
         }catch{}
     }
     
-    @IBAction func getNewCollection(sender: AnyObject) {
-        if(self.selectedIndexes.count==0){
-            self.pageNumber++
-            self.bottomButton.enabled = false
-            for photo in self.fetchedResultsController.fetchedObjects as! [Photo] {
-                self.sharedContext.deleteObject(photo)
-            }
-            self.getCollection()
-            self.bottomButton.enabled = true
-        }
-        else{
-            for index in self.selectedIndexes {
-                let photo = self.fetchedResultsController.objectAtIndexPath(index) as! Photo
-                self.sharedContext.deleteObject(photo)
-                CoreDataStackManager.sharedInstance().saveContext()
-            }
-            
-        }
-        selectedIndexes = [NSIndexPath]()
-        insertedIndexPaths = [NSIndexPath]()
-        deletedIndexPaths = [NSIndexPath]()
-        updatedIndexPaths = [NSIndexPath]()
-        CoreDataStackManager.sharedInstance().saveContext()
-    }
-    
-    override func viewWillAppear(animated: Bool) {
-        super.viewWillAppear(animated)
-        
-        updateBottomButton()
-        removePins()
-        self.mapView.addAnnotation(pin)
-        centerMap()
-        
-        if self.fetchedResultsController.fetchedObjects!.count == 0 {
-            
-            self.getCollection()
-            
-        }
-        
-    }
-    
-    func removePins(){
-        let annotations = self.mapView.annotations
-            for _annotation in annotations {
-                if let annotation = _annotation as MKAnnotation?
-                {
-                    self.mapView.removeAnnotation(annotation)
-                }
-            }
-    }
-    
-    
-    func selectCell(cell: PhotoCell, atIndexPath indexPath: NSIndexPath) {
-        
-        if let _ = selectedIndexes.indexOf(indexPath) {
-            cell.imageView.alpha = 0.5
-        } else {
-            cell.imageView.alpha = 1.0
-        }
-    }
-    
     lazy var fetchedResultsController: NSFetchedResultsController = {
         
         let fetchRequest = NSFetchRequest(entityName: "Photo")
@@ -110,6 +49,76 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
         return fetchedResultsController
     }()
     
+    @IBAction func getNewCollection(sender: AnyObject) {
+        
+        // MARK: - Bottom button functionality depends if the user has selected some images
+        
+        if(self.selectedIndexes.count==0){
+            self.pageNumber++
+            for photo in self.fetchedResultsController.fetchedObjects as! [Photo] {
+                self.sharedContext.deleteObject(photo)
+            }
+            self.pin.getCollection(self.pageNumber,completionHandler: {success in
+                print("success: \(success)")
+            })
+        }
+        else{
+            for index in self.selectedIndexes {
+                let photo = self.fetchedResultsController.objectAtIndexPath(index) as! Photo
+                self.sharedContext.deleteObject(photo)
+                CoreDataStackManager.sharedInstance().saveContext()
+            }
+            
+        }
+        selectedIndexes = [NSIndexPath]()
+        CoreDataStackManager.sharedInstance().saveContext()
+    }
+    
+    override func viewWillAppear(animated: Bool) {
+        super.viewWillAppear(animated)
+        // MARK: - Resetting page number
+        pageNumber = 1
+        updateBottomButton()
+        // MARK: - Resetting the map
+        removePins()
+        // MARK: - Adding the selected pin to the map
+        self.mapView.addAnnotation(pin)
+        centerMap()
+        // MARK: - If there are no photos related to the pin, ask for them
+        print("objects: \(self.fetchedResultsController.fetchedObjects!.count)")
+        if self.fetchedResultsController.fetchedObjects!.count == 0 {
+            self.pin.getCollection(self.pageNumber, completionHandler: {success in
+                self.updateBottomButton()
+                self.updateNoImagesLabel()
+            })
+            
+        }
+        
+    }
+    
+    func removePins(){
+        // MARK: - Deleting every pin in the map (only one, but since i didint have a way to get it, ill just loop through every pin in the map)
+        let annotations = self.mapView.annotations
+            for _annotation in annotations {
+                if let annotation = _annotation as MKAnnotation?
+                {
+                    self.mapView.removeAnnotation(annotation)
+                }
+            }
+    }
+    
+    // MARK: - Convenience methods
+    func selectCell(cell: PhotoCell, atIndexPath indexPath: NSIndexPath) {
+        
+        if let index = selectedIndexes.indexOf(indexPath) {
+            cell.imageView.alpha = 1.0
+            self.selectedIndexes.removeAtIndex(index)
+        } else {
+            self.selectedIndexes.append(indexPath)
+            cell.imageView.alpha = 0.5
+        }
+    }
+    
     func updateBottomButton() {
         if self.selectedIndexes.count > 0 {
             bottomButton.title = "Remove Selected Photos"
@@ -119,7 +128,6 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
     }
     
     func updateNoImagesLabel(){
-        print("Updating label!!")
         if self.fetchedResultsController.fetchedObjects!.count > 0{
             self.noimages.hidden = true
         }else{
@@ -134,9 +142,9 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
         self.mapView.setRegion(region, animated: true)
     }
     
-    func alertViewForError(error: NSError) {
-        
-    }
+    
+    
+    // MARK: - CollectionView Delegate methods
     
     func collectionView(collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
         let sectionInfo = self.fetchedResultsController.sections![section]
@@ -155,21 +163,31 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
         if photo.imageName != "" {
             
             let photoURL = photo.flickrURL
-            Flicker.sharedInstance().getAndStoreImage(photoURL, completionHandler: { downloaded, error in
-                dispatch_async(dispatch_get_main_queue(), {
-                    if(downloaded){
-                        cell.activityView.stopAnimating()
-                        
-                        if let image = photo.image(){
-                            cell.imageView.image = image
+            
+            if (NSFileManager.defaultManager().fileExistsAtPath(photo.imageURL()))
+            {
+                cell.imageView.image = photo.image()
+                cell.activityView.stopAnimating()
+            }
+            else
+            {
+                Flicker.sharedInstance().getAndStoreImage(photoURL, completionHandler: { downloaded, error in
+                    dispatch_async(dispatch_get_main_queue(), {
+                        if(downloaded){
+                            cell.activityView.stopAnimating()
+                            
+                            if let image = photo.image(){
+                                cell.imageView.image = image
+                            }else{
+                                cell.imageView.image = UIImage(named: "downloading")!
+                            }
                         }else{
                             cell.imageView.image = UIImage(named: "downloading")!
                         }
-                    }else{
-                        cell.imageView.image = UIImage(named: "downloading")!
-                    }
+                    })
                 })
-            })
+            }
+            
         }
         
         return cell
@@ -183,23 +201,17 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
         }
     }
     
-
-    
     func collectionView(collectionView: UICollectionView, didSelectItemAtIndexPath indexPath: NSIndexPath) {
         
         let cell = self.collectionView.cellForItemAtIndexPath(indexPath) as! PhotoCell
-        
-        if let index = selectedIndexes.indexOf(indexPath) {
-            selectedIndexes.removeAtIndex(index)
-        } else {
-            selectedIndexes.append(indexPath)
-        }
         
         self.selectCell(cell, atIndexPath: indexPath)
         
         updateBottomButton()
         updateNoImagesLabel()
     }
+    
+    // MARK: - More delegate methods
     
     func controllerWillChangeContent(controller: NSFetchedResultsController) {
         insertedIndexPaths = [NSIndexPath]()
@@ -242,45 +254,7 @@ class PhotoAlbumViewController : UIViewController, UICollectionViewDelegate, NSF
                 self.collectionView.reloadItemsAtIndexPaths([indexPath])
             }
             
-            }, completion: {(p:Bool) -> Void in
-                self.selectedIndexes = [NSIndexPath]()
-                self.updateNoImagesLabel()
-                self.updateBottomButton()
-        })
+            }, completion: nil)
     }
-    
-    func getCollection(){
-        
-        let resource = "/?method=flickr.photos.search"
-        let parameters = ["lat": self.pin.coordinate.latitude, "lon": self.pin.coordinate.longitude, "page": self.pageNumber] 
-        
-        Flicker.sharedInstance().taskForResource(resource, parameters: parameters as! [String : AnyObject] ){ JSONResult, error  in
-            if let error = error {
-                self.alertViewForError(error)
-            } else {
-                
-                if let photosDictionaries = JSONResult.valueForKey("photos")!.valueForKey("photo") as? [[String : AnyObject]] {
-                    // Parse the array of photos dictionaries
-                    let _ = photosDictionaries.map() { (dictionary: [String : AnyObject]) -> Void in
-                        
-                        let photoURL = Flicker.sharedInstance().buildUrlFromDictionary(dictionary)
-                        let fileName = NSURL(fileURLWithPath: photoURL).lastPathComponent
-                        _ = Photo(imageName: fileName!,flickrURL: photoURL , pin: self.pin, context: self.sharedContext)
-                        CoreDataStackManager.sharedInstance().saveContext()
-
-                    }
-                    
-                    dispatch_async(dispatch_get_main_queue()) {
-                        self.collectionView.reloadData()
-                        self.updateBottomButton()
-                        self.updateNoImagesLabel()
-                    }
-                    
-                    
-                }
-            }
-        }
-    }
-    
     
 }

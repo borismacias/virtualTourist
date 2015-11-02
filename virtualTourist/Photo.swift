@@ -13,8 +13,11 @@ class Photo : NSManagedObject {
     
     @NSManaged var imageName: String
     @NSManaged var pin: Pin
+    
+    // MARK: - Storing URL to async download the photos
     @NSManaged var flickrURL: String
     
+    // MARK: - CoreData init
     override init(entity: NSEntityDescription, insertIntoManagedObjectContext context: NSManagedObjectContext?) {
         super.init(entity: entity, insertIntoManagedObjectContext: context)
     }
@@ -29,6 +32,7 @@ class Photo : NSManagedObject {
         self.flickrURL = flickrURL
     }
     
+    // MARK: - Convenience methods
     func image() -> UIImage?{
         print(self.imageURL())
         return UIImage(contentsOfFile: self.imageURL())
@@ -47,4 +51,6 @@ class Photo : NSManagedObject {
         }catch{
         }
     }
+    
+    
 }

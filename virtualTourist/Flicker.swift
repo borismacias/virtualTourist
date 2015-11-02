@@ -39,8 +39,6 @@ class Flicker : NSObject {
         let url = NSURL(string: urlString)!
         let request = NSURLRequest(URL: url)
         
-        print(url)
-        
         let task = session.dataTaskWithRequest(request) {data, response, downloadError in
             
             if let error = downloadError {
@@ -78,7 +76,7 @@ class Flicker : NSObject {
     }
     
     func getAndStoreImage(url: String, completionHandler: (downloaded: DarwinBoolean, error: NSError?) ->  Void) -> Void{
-        
+        print("Getting and storing!!")
         self.taskForImageWithSize(url, completionHandler: { imageData,error in
             if let result = imageData {
                 
@@ -116,7 +114,7 @@ class Flicker : NSObject {
         if let error = parsingError {
             completionHandler(result: nil, error: error)
         } else {
-            print("Step 4 - parseJSONWithCompletionHandler is invoked.")
+
             completionHandler(result: parsedResult, error: nil)
         }
     }
